@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CAD-911 // Emergency Dispatch & Station Alerting Console</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono for authentic CAD terminal look -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <!-- Font Awesome for crisp tactical icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        cad: {
+                            bg: '#090d16',
+                            panel: '#111827',
+                            card: '#1a2234',
+                            border: '#2a364f',
+                            red: '#ef4444',
+                            amber: '#f59e0b',
+                            cyan: '#06b6d4',
+                            green: '#10b981'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom animations for transmitting waveform and tally light */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+        }
+        .transmit-pulse {
+            animation: pulse-ring 1.5s infinite;
+        }
+        @keyframes eq-bar {
+            0%, 100% { height: 20%; }
+            50% { height: 100%; }
+        }
+        .eq-active .bar-1 { animation: eq-bar 0.45s ease-in-out infinite; }
+        .eq-active .bar-2 { animation: eq-bar 0.35s ease-in-out infinite 0.1s; }
+        .eq-active .bar-3 { animation: eq-bar 0.55s ease-in-out infinite 0.2s; }
+        .eq-active .bar-4 { animation: eq-bar 0.40s ease-in-out infinite 0.05s; }
+        .eq-active .bar-5 { animation: eq-bar 0.50s ease-in-out infinite 0.15s; }
+        .eq-active .bar-6 { animation: eq-bar 0.38s ease-in-out infinite 0.25s; }
+        .eq-active .bar-7 { animation: eq-bar 0.48s ease-in-out infinite 0.12s; }
+
+        /* Custom scrollbar for dark CAD console */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #090d16; }
+        ::-webkit-scrollbar-thumb { background: #2a364f; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3b4c6e; }
+    </style>
+</head>
+<body class="bg-cad-bg text-slate-100 font-sans min-h-screen flex flex-col selection:bg-cyan-500 selection:text-slate-950">
+
+    <!-- Top CAD Header Bar -->
+    <header class="bg-cad-panel border-b border-cad-border sticky top-0 z-30 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <!-- Branding & Channel ID -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-red-600/20 border border-red-500/50 flex items-center justify-center text-red-500 shadow-inner">
+                    <i class="fa-solid fa-tower-broadcast text-lg"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="font-bold text-base sm:text-lg tracking-wider uppercase text-white">Metro Fire / EMS CAD</h1>
+                        <span class="px-2 py-0.5 text-[10px] font-mono font-bold uppercase tracking-widest bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 rounded">CH-1 DISP</span>
+                    </div>
+                    <p class="text-xs text-slate-400 font-mono">AUTOMATED STATION ALERTING & VOICE DISPATCH</p>
+                </div>
+            </div>
+
+            <!-- Live On-Air Status & Waveform -->
+            <div id="onAirBanner" class="flex items-center gap-3 px-4 py-2 rounded-lg bg-cad-card border border-cad-border transition-all duration-300">
+                <div id="statusDot" class="w-3 h-3 rounded-full bg-slate-600"></div>
+                <span id="statusText" class="font-mono text-xs sm:text-sm font-bold tracking-wider text-slate-400">STANDBY // READY</span>
+                <!-- Equalizer Bars -->
+                <div id="waveformBars" class="flex items-end gap-1 h-5 w-12 ml-1 opacity-30 transition-opacity">
+                    <span class="bar-1 w-1 bg-red-500 rounded-t h-1/3"></span>
+                    <span class="bar-2 w-1 bg-amber-400 rounded-t h-2/3"></span>
+                    <span class="bar-3 w-1 bg-red-500 rounded-t h-full"></span>
+                    <span class="bar-4 w-1 bg-cyan-400 rounded-t h-1/2"></span>
+                    <span class="bar-5 w-1 bg-red-500 rounded-t h-4/5"></span>
+                    <span class="bar-6 w-1 bg-amber-400 rounded-t h-1/3"></span>
+                    <span class="bar-7 w-1 bg-red-500 rounded-t h-2/3"></span>
+                </div>
+            </div>
+
+            <!-- Live 24-Hour Digital CAD Clock -->
+            <div class="flex items-center gap-3 bg-slate-950/80 px-3.5 py-2 rounded-lg border border-cad-border">
+                <div class="text-right">
+                    <div id="liveClock" class="font-mono text-lg sm:text-xl font-extrabold text-cyan-400 tracking-widest leading-none">00:00:00</div>
+                    <div id="liveDate" class="font-mono text-[10px] text-slate-400 uppercase tracking-wider mt-1">LOADING DATE...</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Non-blocking Toast / Status Notification Banner -->
+    <div id="toastNotification" class="fixed bottom-5 right-5 z-50 transform translate-y-24 opacity-0 transition-all duration-300 pointer-events-none max-w-sm">
+        <div class="bg-slate-900 border border-cyan-500/60 text-slate-100 px-4 py-3 rounded-lg shadow-2xl flex items-center gap-3">
+            <i id="toastIcon" class="fa-solid fa-circle-info text-cyan-400 text-lg"></i>
+            <p id="toastMessage" class="text-sm font-medium"></p>
+        </div>
+    </div>
+
+    <!-- Main Console Workspace -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- LEFT / CENTER COLUMN: Dispatch Composer (7 cols on lg) -->
+        <div class="lg:col-span-7 space-y-6">
+
+            <!-- STEP 1: Apparatus Callsign Builder -->
+            <section class="bg-cad-panel border border-cad-border rounded-xl p-5 shadow-lg">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <span class="w-6 h-6 rounded bg-red-500/20 text-red-400 font-mono text-xs font-bold flex items-center justify-center border border-red-500/30">01</span>
+                        <h2 class="font-bold text-sm sm:text-base uppercase tracking-wider text-slate-100">Apparatus & Unit Assignment</h2>
+                    </div>
+                    <button id="clearUnitsBtn" type="button" class="text-xs font-mono text-slate-400 hover:text-red-400 transition-colors px-2 py-1 rounded hover:bg-red-500/10">
+                        <i class="fa-solid fa-trash-can mr-1"></i>CLEAR ALL
+                    </button>
+                </div>
+
+                <!-- Quick-Add Unit Presets -->
+                <div class="mb-4">
+                    <label class="block text-xs font-mono uppercase tracking-wider text-slate-400 mb-2">Quick-Toggle Apparatus</label>
+                    <div id="presetUnitsGrid" class="flex flex-wrap gap-2">
+                        <!-- Populated dynamically via JS -->
+                    </div>
+                </div>
+
+                <!-- Custom Callsign Input -->
+                <div class="mb-4">
+                    <label for="customUnitInput" class="block text-xs font-mono uppercase tracking-wider text-slate-400 mb-1.5">Add Custom Apparatus / Unit Callsign</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="customUnitInput" placeholder="e.g., HazMat 3, Brush 9, Air 1, Chief 2..." 
+                            class="flex-1 bg-cad-bg border border-cad-border rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono">
+                        <button id="addCustomUnitBtn" type="button" 
+                            class="bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 text-slate-950 font-bold text-sm px-4 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 shrink-0">
+                            <i class="fa-solid fa-plus"></i> ADD UNIT
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Active Dispatch Queue (Reorderable) -->
+                <div class="bg-cad-bg/90 border border-cad-border rounded-lg p-3.5">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-mono uppercase tracking-wider text-amber-400 font-semibold">
+                            <i class="fa-solid fa-truck-medical mr-1.5"></i>Active Dispatch Queue (<span id="unitCount">0</span>)
+                        </span>
+                        <span class="text-[11px] text-slate-500 font-mono">Use arrows to set voice order</span>
+                    </div>
+                    <div id="activeUnitsQueue" class="flex flex-wrap gap-2 min-h-[44px] items-center">
+                        <span class="text-xs text-slate-500 italic font-mono">No apparatus selected. Click units above to build assignment...</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- STEP 2: Incident & Location Details -->
+            <section class="bg-cad-panel border border-cad-border rounded-xl p-5 shadow-lg">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="w-6 h-6 rounded bg-amber-500/20 text-amber-400 font-mono text-xs font-bold flex items-center justify-center border border-amber-500/30">02</span>
+                    <h2 class="font-bold text-sm sm:text-base uppercase tracking-wider text-slate-100">Incident Nature & Location</h2>
+                </div>
+
+                <!-- Incident Type Presets & Input -->
+                <div class="mb-4">
+                    <label for="incidentTypeInput" class="block text-xs font-mono uppercase tracking-wider text-slate-400 mb-1.5">Incident Nature / Call Type</label>
+                    <div id="incidentPresets" class="flex flex-wrap gap-1.5 mb-2.5">
+                        <!-- Quick fill chips injected via JS -->
+                    </div>
+                    <input type="text" id="incidentTypeInput" value="Structure Fire" placeholder="Enter incident type (e.g., Cardiac Arrest, Structure Fire)..." 
+                        class="w-full bg-cad-bg border border-cad-border rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 font-medium">
+                </div>
+
+                <!-- Custom Location Input + Sample Fillers -->
+                <div class="mb-4">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                        <label for="locationInput" class="text-xs font-mono uppercase tracking-wider text-slate-400">Incident Location / Address / Cross Streets</label>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-[11px] font-mono text-slate-500">Samples:</span>
+                            <button type="button" class="sample-loc-btn text-[11px] font-mono bg-cad-card hover:bg-slate-700 text-cyan-400 border border-cad-border px-2 py-0.5 rounded transition" data-loc="1420 Oakridge Avenue, Cross of Maple Street">1420 Oakridge Ave</button>
+                            <button type="button" class="sample-loc-btn text-[11px] font-mono bg-cad-card hover:bg-slate-700 text-cyan-400 border border-cad-border px-2 py-0.5 rounded transition" data-loc="Northbound Interstate 271 at Exit 34">I-271 Exit 34</button>
+                            <button type="button" class="sample-loc-btn text-[11px] font-mono bg-cad-card hover:bg-slate-700 text-cyan-400 border border-cad-border px-2 py-0.5 rounded transition" data-loc="400 Commerce Center Plaza, Suite B">Commerce Plaza</button>
+                        </div>
+                    </div>
+                    <div class="relative">
+                        <i class="fa-solid fa-location-dot absolute left-3.5 top-3 text-red-400"></i>
+                        <input type="text" id="locationInput" value="742 Evergreen Terrace, Cross of Highland Avenue" placeholder="Enter street address, intersection, or landmark..." 
+                            class="w-full bg-cad-bg border border-cad-border rounded-lg pl-9 pr-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500">
+                    </div>
+                </div>
+
+                <!-- Tactical Channel & Dispatch Notes -->
+                <div>
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                        <label for="notesInput" class="text-xs font-mono uppercase tracking-wider text-slate-400">Tactical Channel & CAD Remarks</label>
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" class="sample-note-btn text-[11px] font-mono bg-cad-card hover:bg-slate-700 text-amber-400 border border-cad-border px-2 py-0.5 rounded transition" data-note="Respond on Tac 2. Caller reports heavy smoke visible from the roof.">Tac 2 / Smoke</button>
+                            <button type="button" class="sample-note-btn text-[11px] font-mono bg-cad-card hover:bg-slate-700 text-amber-400 border border-cad-border px-2 py-0.5 rounded transition" data-note="Respond on EMS Ops 1. Stage for Police Department.">Stage for PD</button>
+                        </div>
+                    </div>
+                    <input type="text" id="notesInput" value="Respond on Tac 2." placeholder="e.g., Respond on Tac 2, Caller reports smoke showing, Stage for PD..." 
+                        class="w-full bg-cad-bg border border-cad-border rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500">
+                </div>
+            </section>
+
+            <!-- Live Generated Script Preview & Primary Transmit Button -->
+            <section class="bg-gradient-to-br from-cad-panel to-slate-900 border border-cad-border rounded-xl p-5 shadow-xl">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-mono uppercase tracking-wider text-cyan-400 font-bold">
+                        <i class="fa-solid fa-terminal mr-1.5"></i>Live Automated Voice Transcript Preview
+                    </span>
+                    <span id="repeatBadge" class="hidden text-[11px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded">2X REPEAT ACTIVE</span>
+                </div>
+                <div id="scriptPreviewBox" class="bg-slate-950 border border-slate-800 rounded-lg p-3.5 font-mono text-xs sm:text-sm text-emerald-400 leading-relaxed mb-4 min-h-[68px]">
+                    <!-- Populated live as user edits fields -->
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <button id="transmitBtn" type="button" 
+                        class="flex-1 bg-red-600 hover:bg-red-500 active:bg-red-700 text-white font-extrabold text-base tracking-wider uppercase py-3.5 px-6 rounded-xl shadow-lg shadow-red-900/40 border border-red-400/30 transition-all flex items-center justify-center gap-3 cursor-pointer">
+                        <i class="fa-solid fa-bullhorn text-lg"></i>
+                        <span>TRANSMIT DISPATCH ALERT</span>
+                    </button>
+                    <button id="stopBtn" type="button" disabled
+                        class="sm:w-36 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed text-slate-200 font-mono font-bold text-sm uppercase py-3.5 px-4 rounded-xl border border-slate-600 transition-all flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-stop"></i>
+                        <span>ABORT</span>
+                    </button>
+                </div>
+            </section>
+        </div>
+
+        <!-- RIGHT COLUMN: Audio Tone Synthesizer, Voice Tuning & Dispatch History (5 cols on lg) -->
+        <div class="lg:col-span-5 space-y-6">
+
+            <!-- STEP 3: Pre-Alert Tone Generator & Radio Effects -->
+            <section class="bg-cad-panel border border-cad-border rounded-xl p-5 shadow-lg">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <span class="w-6 h-6 rounded bg-cyan-500/20 text-cyan-400 font-mono text-xs font-bold flex items-center justify-center border border-cyan-500/30">03</span>
+                        <h2 class="font-bold text-sm sm:text-base uppercase tracking-wider text-slate-100">Pre-Alert Tones & Radio FX</h2>
+                    </div>
+                </div>
+
+                <!-- Tone Pattern Selector -->
+                <div class="mb-4">
+                    <label for="toneSelect" class="block text-xs font-mono uppercase tracking-wider text-slate-400 mb-1.5">Station Pre-Alert Tone Sequence</label>
+                    <div class="flex gap-2">
+                        <select id="toneSelect" class="flex-1 bg-cad-bg border border-cad-border rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-500 font-medium">
+                            <option value="triple_beep">Standard Triple Beep (Beep-Beep-Beep)</option>
+                            <option value="quick_call">Two-Tone Fire Pager (Quick Call II)</option>
+                            <option value="hi_lo">Hi-Lo European / EMS Alert Tone</option>
+                            <option value="warble">Continuous Priority Warble</option>
+                            <option value="none">No Pre-Alert Tone (Voice Only)</option>
+                        </select>
+                        <button id="testToneBtn" type="button" title="Preview Alert Tone Alone"
+                            class="bg-cad-card hover:bg-slate-700 text-cyan-400 border border-cad-border font-mono font-bold text-xs px-3.5 py-2.5 rounded-lg transition-colors flex items-center gap-1.5 shrink-0">
+                            <i class="fa-solid fa-volume-high"></i> TEST TONE
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Radio Effect Toggles -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <!-- Squelch / Static Click Toggle -->
+                    <label class="flex items-center justify-between bg-cad-bg border border-cad-border rounded-lg px-3.5 py-2.5 cursor-pointer hover:border-slate-600 transition">
+                        <div>
+                            <div class="text-xs font-bold text-slate-200">Radio Squelch FX</div>
+                            <div class="text-[11px] text-slate-400">Key-up & tail static burst</div>
+                        </div>
+                        <input type="checkbox" id="squelchToggle" checked class="w-4 h-4 accent-cyan-500 rounded cursor-pointer">
+                    </label>
+
+                    <!-- Repeat Dispatch Toggle -->
+                    <label class="flex items-center justify-between bg-cad-bg border border-cad-border rounded-lg px-3.5 py-2.5 cursor-pointer hover:border-slate-600 transition">
+                        <div>
+                            <div class="text-xs font-bold text-slate-200">Repeat Dispatch (2x)</div>
+                            <div class="text-[11px] text-slate-400">Reads units & address twice</div>
+                        </div>
+                        <input type="checkbox" id="repeatToggle" class="w-4 h-4 accent-amber-500 rounded cursor-pointer">
+                    </label>
+                </div>
+            </section>
+
+            <!-- STEP 4: AI CAD Voice Synthesizer Tuning -->
+            <section class="bg-cad-panel border border-cad-border rounded-xl p-5 shadow-lg">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <span class="w-6 h-6 rounded bg-emerald-500/20 text-emerald-400 font-mono text-xs font-bold flex items-center justify-center border border-emerald-500/30">04</span>
+                        <h2 class="font-bold text-sm sm:text-base uppercase tracking-wider text-slate-100">Automated CAD Voice Engine</h2>
+                    </div>
+                    <button id="resetVoiceBtn" type="button" class="text-xs font-mono text-slate-400 hover:text-cyan-400 transition">
+                        RESET CAD CADENCE
+                    </button>
+                </div>
+
+                <!-- System Voice Selector -->
+                <div class="mb-4">
+                    <label for="voiceSelect" class="block text-xs font-mono uppercase tracking-wider text-slate-400 mb-1.5">Synthesizer Voice Profile</label>
+                    <select id="voiceSelect" class="w-full bg-cad-bg border border-cad-border rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-500">
+                        <option value="">Loading system voices...</option>
+                    </select>
+                </div>
+
+                <!-- Speech Rate & Pitch Sliders -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="bg-cad-bg border border-cad-border rounded-lg p-3">
+                        <div class="flex justify-between text-xs font-mono mb-1.5">
+                            <span class="text-slate-400">CADENCE / RATE</span>
+                            <span id="rateValue" class="text-cyan-400 font-bold">1.05x</span>
+                        </div>
+                        <input type="range" id="rateSlider" min="0.7" max="1.4" step="0.05" value="1.05" class="w-full accent-cyan-500 cursor-pointer">
+                    </div>
+
+                    <div class="bg-cad-bg border border-cad-border rounded-lg p-3">
+                        <div class="flex justify-between text-xs font-mono mb-1.5">
+                            <span class="text-slate-400">VOICE PITCH</span>
+                            <span id="pitchValue" class="text-cyan-400 font-bold">0.95</span>
+                        </div>
+                        <input type="range" id="pitchSlider" min="0.6" max="1.3" step="0.05" value="0.95" class="w-full accent-cyan-500 cursor-pointer">
+                    </div>
+                </div>
+            </section>
+
+            <!-- Active Dispatch Log / History -->
+            <section class="bg-cad-panel border border-cad-border rounded-xl p-5 shadow-lg flex flex-col">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-clock-rotate-left text-cyan-400"></i>
+                        <h2 class="font-bold text-sm sm:text-base uppercase tracking-wider text-slate-100">CAD Dispatch Log</h2>
+                    </div>
+                    <button id="clearLogBtn" type="button" class="text-xs font-mono text-slate-400 hover:text-red-400 transition">
+                        CLEAR LOG
+                    </button>
+                </div>
+
+                <div id="dispatchLogList" class="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
+                    <div class="text-center py-8 text-xs font-mono text-slate-500 border border-dashed border-cad-border rounded-lg">
+                        NO RECENT TRANSMISSIONS LOGGED
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-cad-border bg-cad-panel/60 py-3 px-4 text-center text-xs font-mono text-slate-500">
+        CAD-911 STATION ALERTING SIMULATOR // WEB AUDIO API SYNTHESIS & WEB SPEECH ENGINE // FOR SIMULATION & TRAINING USE ONLY
+    </footer>
+
+    <!-- Application Logic -->
+    <script>
+        /**
+         * ============================================================================
+         * CAD-911 EMERGENCY DISPATCH & STATION ALERTING SIMULATOR
+         * ============================================================================
+         * Architecture:
+         * 1. State Management: Tracks selected units, incident details, audio settings, and dispatch history.
+         * 2. Web Audio API Engine: Synthesizes authentic station pre-alert tones (Triple Beep, Quick Call II,
+         *    Hi-Lo, Warble) and realistic VHF/UHF radio squelch bursts without external audio files.
+         * 3. Web Speech API Engine: Formats and voices the CAD dispatch script with customizable cadence,
+         *    pitch, and optional 2x station repeat.
+         * 4. Reactive CAD UI: Live 24-hour clock, unit queue reordering, transcript preview, and replayable log.
+         */
+
+        // --- Application State ---
+        const state = {
+            presetUnits: [
+                { name: 'Medic 20', type: 'ems' },
+                { name: 'Ladder 6', type: 'truck' },
+                { name: 'Engine 1', type: 'engine' },
+                { name: 'Battalion 1', type: 'chief' },
+                { name: 'Rescue 4', type: 'squad' },
+                { name: 'Squad 2', type: 'squad' },
+                { name: 'Engine 12', type: 'engine' },
+                { name: 'Medic 5', type: 'ems' }
+            ],
+            incidentPresets: [
+                'Structure Fire',
+                'Motor Vehicle Accident with Entrapment',
+                'Cardiac Arrest',
+                'Medical Emergency',
+                'Commercial Fire Alarm',
+                'Gas Leak'
+            ],
+            activeUnits: ['Medic 20', 'Ladder 6'], // Default initial units matching user prompt
+            isTransmitting: false,
+            audioCtx: null,
+            activeOscillators: [],
+            voices: [],
+            dispatchHistory: []
+        };
+
+        // --- DOM Element References ---
+        const els = {
+            liveClock: document.getElementById('liveClock'),
+            liveDate: document.getElementById('liveDate'),
+            onAirBanner: document.getElementById('onAirBanner'),
+            statusDot: document.getElementById('statusDot'),
+            statusText: document.getElementById('statusText'),
+            waveformBars: document.getElementById('waveformBars'),
+            presetUnitsGrid: document.getElementById('presetUnitsGrid'),
+            customUnitInput: document.getElementById('customUnitInput'),
+            addCustomUnitBtn: document.getElementById('addCustomUnitBtn'),
+            activeUnitsQueue: document.getElementById('activeUnitsQueue'),
+            unitCount: document.getElementById('unitCount'),
+            clearUnitsBtn: document.getElementById('clearUnitsBtn'),
+            incidentPresets: document.getElementById('incidentPresets'),
+            incidentTypeInput: document.getElementById('incidentTypeInput'),
+            locationInput: document.getElementById('locationInput'),
+            notesInput: document.getElementById('notesInput'),
+            scriptPreviewBox: document.getElementById('scriptPreviewBox'),
+            repeatBadge: document.getElementById('repeatBadge'),
+            transmitBtn: document.getElementById('transmitBtn'),
+            stopBtn: document.getElementById('stopBtn'),
+            toneSelect: document.getElementById('toneSelect'),
+            testToneBtn: document.getElementById('testToneBtn'),
+            squelchToggle: document.getElementById('squelchToggle'),
+            repeatToggle: document.getElementById('repeatToggle'),
+            voiceSelect: document.getElementById('voiceSelect'),
+            rateSlider: document.getElementById('rateSlider'),
+            rateValue: document.getElementById('rateValue'),
+            pitchSlider: document.getElementById('pitchSlider'),
+            pitchValue: document.getElementById('pitchValue'),
+            resetVoiceBtn: document.getElementById('resetVoiceBtn'),
+            dispatchLogList: document.getElementById('dispatchLogList'),
+            clearLogBtn: document.getElementById('clearLogBtn'),
+            toastNotification: document.getElementById('toastNotification'),
+            toastMessage: document.getElementById('toastMessage'),
+            toastIcon: document.getElementById('toastIcon')
+        };
+
+        // --- Notification Toast Helper (Replaces alert()) ---
+        let toastTimeout = null;
+        function showToast(message, type = 'info') {
+            els.toastMessage.textContent = message;
+            els.toastIcon.className = type === 'error'
+                ? 'fa-solid fa-triangle-exclamation text-red-400 text-lg'
+                : 'fa-solid fa-circle-info text-cyan-400 text-lg';
+
+            els.toastNotification.classList.remove('translate-y-24', 'opacity-0');
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                els.toastNotification.classList.add('translate-y-24', 'opacity-0');
+            }, 3200);
+        }
+
+        // --- Live 24-Hour Clock ---
+        function updateClock() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const mins = String(now.getMinutes()).padStart(2, '0');
+            const secs = String(now.getSeconds()).padStart(2, '0');
+            els.liveClock.textContent = `${hours}:${mins}:${secs}`;
+
+            const options = { weekday: 'short', year: 'numeric', month: 'short', day: '2-digit' };
+            els.liveDate.textContent = now.toLocaleDateString('en-US', options).toUpperCase();
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        function getFormattedDispatchTime() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const mins = String(now.getMinutes()).padStart(2, '0');
+            return `${hours}:${mins}`;
+        }
+
+        // ============================================================================
+        // WEB AUDIO API: PRE-ALERT TONE & RADIO SQUELCH SYNTHESIZER
+        // ============================================================================
+        function ensureAudioContext() {
+            if (!state.audioCtx) {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                state.audioCtx = new AudioContextClass();
+            }
+            if (state.audioCtx.state === 'suspended') {
+                state.audioCtx.resume();
+            }
+            return state.audioCtx;
+        }
+
+        function stopAllAudioNodes() {
+            state.activeOscillators.forEach(node => {
+                try {
+                    node.stop();
+                    node.disconnect();
+                } catch (e) { /* Ignore already stopped nodes */ }
+            });
+            state.activeOscillators = [];
+        }
+
+        /**
+         * Synthesizes a realistic VHF/UHF radio squelch burst / key-up click
+         * @param {number} durationSec - Length of static burst in seconds
+         */
+        function playRadioSquelch(durationSec = 0.14) {
+            return new Promise((resolve) => {
+                if (!els.squelchToggle.checked) {
+                    resolve();
+                    return;
+                }
+                try {
+                    const ctx = ensureAudioContext();
+                    const bufferSize = Math.floor(ctx.sampleRate * durationSec);
+                    const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+                    const output = noiseBuffer.getChannelData(0);
+
+                    for (let i = 0; i < bufferSize; i++) {
+                        output[i] = (Math.random() * 2 - 1) * 0.35;
+                    }
+
+                    const whiteNoise = ctx.createBufferSource();
+                    whiteNoise.buffer = noiseBuffer;
+
+                    // Bandpass filter to mimic 300Hz - 3000Hz radio voice channel
+                    const filter = ctx.createBiquadFilter();
+                    filter.type = 'bandpass';
+                    filter.frequency.value = 1400;
+                    filter.Q.value = 1.2;
+
+                    const gainNode = ctx.createGain();
+                    const now = ctx.currentTime;
+                    gainNode.gain.setValueAtTime(0.01, now);
+                    gainNode.gain.linearRampToValueAtTime(0.28, now + 0.015);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, now + durationSec);
+
+                    whiteNoise.connect(filter);
+                    filter.connect(gainNode);
+                    gainNode.connect(ctx.destination);
+
+                    whiteNoise.start(now);
+                    state.activeOscillators.push(whiteNoise);
+
+                    setTimeout(resolve, durationSec * 1000);
+                } catch (err) {
+                    resolve();
+                }
+            });
+        }
+
+        /**
+         * Plays a single pure or shaped tone segment
+         */
+        function scheduleTone(ctx, freq, startTime, duration, waveType = 'sine', volume = 0.35) {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.type = waveType;
+            osc.frequency.setValueAtTime(freq, startTime);
+
+            // Smooth attack and release envelope to prevent speaker popping
+            gain.gain.setValueAtTime(0.0001, startTime);
+            gain.gain.linearRampToValueAtTime(volume, startTime + 0.015);
+            gain.gain.setValueAtTime(volume, startTime + duration - 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start(startTime);
+            osc.stop(startTime + duration);
+            state.activeOscillators.push(osc);
+        }
+
+        /**
+         * Plays the selected Pre-Alert Tone pattern and resolves when finished
+         */
+        function playSelectedAlertTone(toneTypeOverride = null) {
+            const toneType = toneTypeOverride || els.toneSelect.value;
+
+            return new Promise((resolve) => {
+                if (toneType === 'none') {
+                    resolve();
+                    return;
+                }
+
+                try {
+                    const ctx = ensureAudioContext();
+                    const now = ctx.currentTime + 0.03;
+                    let totalDuration = 0;
+
+                    if (toneType === 'triple_beep') {
+                        // Authentic 1000Hz CAD Triple Beep (Beep - Beep - Beep)
+                        const beepDur = 0.22;
+                        const gap = 0.14;
+                        for (let i = 0; i < 3; i++) {
+                            scheduleTone(ctx, 1000, now + i * (beepDur + gap), beepDur, 'sine', 0.38);
+                        }
+                        totalDuration = 3 * beepDur + 2 * gap + 0.15;
+                    } 
+                    else if (toneType === 'quick_call') {
+                        // Motorola Quick Call II Two-Tone Pager (e.g., 600.9 Hz for 1.0s -> 1122.5 Hz for 1.6s)
+                        scheduleTone(ctx, 600.9, now, 0.95, 'sine', 0.38);
+                        scheduleTone(ctx, 1122.5, now + 0.98, 1.55, 'sine', 0.38);
+                        totalDuration = 2.65;
+                    } 
+                    else if (toneType === 'hi_lo') {
+                        // European / EMS Hi-Lo Alternating Alert (780 Hz / 585 Hz)
+                        const step = 0.32;
+                        for (let i = 0; i < 6; i++) {
+                            const freq = i % 2 === 0 ? 780 : 585;
+                            scheduleTone(ctx, freq, now + i * step, step - 0.02, 'triangle', 0.36);
+                        }
+                        totalDuration = 6 * step + 0.12;
+                    } 
+                    else if (toneType === 'warble') {
+                        // Continuous Priority Warble (Alternating fast 850Hz / 1150Hz)
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        const dur = 1.8;
+
+                        osc.type = 'sawtooth';
+                        // Lowpass filter to warm up the sawtooth
+                        const filter = ctx.createBiquadFilter();
+                        filter.type = 'lowpass';
+                        filter.frequency.value = 1800;
+
+                        const steps = 18;
+                        const stepDur = dur / steps;
+                        for (let i = 0; i < steps; i++) {
+                            osc.frequency.setValueAtTime(i % 2 === 0 ? 850 : 1150, now + i * stepDur);
+                        }
+
+                        gain.gain.setValueAtTime(0.001, now);
+                        gain.gain.linearRampToValueAtTime(0.28, now + 0.03);
+                        gain.gain.setValueAtTime(0.28, now + dur - 0.04);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+                        osc.connect(filter);
+                        filter.connect(gain);
+                        gain.connect(ctx.destination);
+
+                        osc.start(now);
+                        osc.stop(now + dur);
+                        state.activeOscillators.push(osc);
+                        totalDuration = dur + 0.12;
+                    }
+
+                    setTimeout(resolve, totalDuration * 1000);
+                } catch (e) {
+                    console.error('Web Audio Tone Error:', e);
+                    resolve();
+                }
+            });
+        }
+
+        // ============================================================================
+        // WEB SPEECH API: AUTOMATED CAD DISPATCH VOICE ENGINE
+        // ============================================================================
+        function populateVoices() {
+            if (!('speechSynthesis' in window)) {
+                els.voiceSelect.innerHTML = '<option value="">Speech Synthesis Not Supported</option>';
+                return;
+            }
+
+            const allVoices = window.speechSynthesis.getVoices();
+            if (!allVoices.length) return;
+
+            // Prioritize English voices for clear CAD pronunciation
+            const enVoices = allVoices.filter(v => v.lang.toLowerCase().startsWith('en'));
+            const displayVoices = enVoices.length > 0 ? enVoices : allVoices;
+            state.voices = displayVoices;
+
+            const currentSelection = els.voiceSelect.value;
+            els.voiceSelect.innerHTML = '';
+
+            displayVoices.forEach((voice, idx) => {
+                const option = document.createElement('option');
+                option.value = idx;
+                option.textContent = `${voice.name} (${voice.lang})`;
+                els.voiceSelect.appendChild(option);
+            });
+
+            // Auto-select a crisp, authoritative default voice if available
+            if (currentSelection && displayVoices[currentSelection]) {
+                els.voiceSelect.value = currentSelection;
+            } else {
+                const preferredIndex = displayVoices.findIndex(v =>
+                    /google us english|daniel|david|alex|samantha|microsoft mark|zira/i.test(v.name)
+                );
+                if (preferredIndex !== -1) {
+                    els.voiceSelect.value = preferredIndex;
+                }
+            }
+        }
+
+        if ('speechSynthesis' in window) {
+            populateVoices();
+            window.speechSynthesis.onvoiceschanged = populateVoices;
+        }
+
+        /**
+         * Builds the formatted CAD text string based on current inputs
+         */
+        function buildDispatchScript(customData = null) {
+            const units = customData ? customData.units : state.activeUnits;
+            const incident = (customData ? customData.incident : els.incidentTypeInput.value).trim() || 'Emergency Response';
+            const location = (customData ? customData.location : els.locationInput.value).trim() || 'Reported Location';
+            const notes = (customData ? customData.notes : els.notesInput.value).trim();
+            const isRepeat = customData ? customData.repeat : els.repeatToggle.checked;
+            const timeOut = customData ? customData.timeOut : getFormattedDispatchTime();
+
+            const unitsText = units.length > 0 ? units.join(', ') : 'All available units';
+            const notesClause = notes ? ` ${notes.endsWith('.') ? notes : notes + '.'}` : '';
+
+            const coreCallout = `${unitsText}... Respond to ${incident} at ${location}.`;
+
+            if (isRepeat) {
+                return `${coreCallout}${notesClause} Repeating... ${coreCallout} Time out ${timeOut}.`;
+            }
+            return `${coreCallout}${notesClause} Time out ${timeOut}.`;
+        }
+
+        function updateScriptPreview() {
+            els.scriptPreviewBox.textContent = `"${buildDispatchScript()}"`;
+            if (els.repeatToggle.checked) {
+                els.repeatBadge.classList.remove('hidden');
+            } else {
+                els.repeatBadge.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Speaks the text using Web Speech API
+         */
+        function speakDispatchText(text) {
+            return new Promise((resolve) => {
+                if (!('speechSynthesis' in window)) {
+                    showToast('Your browser does not support Web Speech synthesis.', 'error');
+                    resolve();
+                    return;
+                }
+
+                window.speechSynthesis.cancel(); // Clear any stuck speech queue
+
+                const utterance = new SpeechSynthesisUtterance(text);
+                const selectedIdx = parseInt(els.voiceSelect.value, 10);
+                if (!isNaN(selectedIdx) && state.voices[selectedIdx]) {
+                    utterance.voice = state.voices[selectedIdx];
+                }
+
+                utterance.rate = parseFloat(els.rateSlider.value) || 1.05;
+                utterance.pitch = parseFloat(els.pitchSlider.value) || 0.95;
+                utterance.volume = 1.0;
+
+                utterance.onend = () => resolve();
+                utterance.onerror = () => resolve();
+
+                window.speechSynthesis.speak(utterance);
+            });
+        }
+
+        // ============================================================================
+        // TRANSMISSION ORCHESTRATOR & UI STATE
+        // ============================================================================
+        function setTransmittingUI(active, label = 'TRANSMITTING ALERT...') {
+            state.isTransmitting = active;
+            els.transmitBtn.disabled = active;
+            els.stopBtn.disabled = !active;
+
+            if (active) {
+                els.onAirBanner.classList.remove('bg-cad-card', 'border-cad-border');
+                els.onAirBanner.classList.add('bg-red-950/60', 'border-red-500');
+                els.statusDot.className = 'w-3 h-3 rounded-full bg-red-500 transmit-pulse';
+                els.statusText.className = 'font-mono text-xs sm:text-sm font-extrabold tracking-wider text-red-400';
+                els.statusText.textContent = label;
+                els.waveformBars.classList.remove('opacity-30');
+                els.waveformBars.classList.add('eq-active');
+                els.transmitBtn.classList.add('opacity-60', 'cursor-not-allowed');
+            } else {
+                els.onAirBanner.classList.add('bg-cad-card', 'border-cad-border');
+                els.onAirBanner.classList.remove('bg-red-950/60', 'border-red-500');
+                els.statusDot.className = 'w-3 h-3 rounded-full bg-slate-600';
+                els.statusText.className = 'font-mono text-xs sm:text-sm font-bold tracking-wider text-slate-400';
+                els.statusText.textContent = 'STANDBY // READY';
+                els.waveformBars.classList.add('opacity-30');
+                els.waveformBars.classList.remove('eq-active');
+                els.transmitBtn.classList.remove('opacity-60', 'cursor-not-allowed');
+            }
+        }
+
+        function abortTransmission() {
+            stopAllAudioNodes();
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+            }
+            setTransmittingUI(false);
+        }
+
+        /**
+         * Master Sequence: Squelch -> Alert Tone -> AI Voice -> End Squelch
+         */
+        async function executeDispatchTransmission(replayEntry = null) {
+            if (state.isTransmitting) return;
+
+            const units = replayEntry ? [...replayEntry.units] : [...state.activeUnits];
+            if (units.length === 0) {
+                showToast('Please select or add at least one apparatus unit before dispatching.', 'error');
+                return;
+            }
+
+            const incident = replayEntry ? replayEntry.incident : (els.incidentTypeInput.value.trim() || 'Emergency Response');
+            const location = replayEntry ? replayEntry.location : els.locationInput.value.trim();
+            if (!location) {
+                showToast('Please enter a dispatch location or address.', 'error');
+                els.locationInput.focus();
+                return;
+            }
+
+            const notes = replayEntry ? replayEntry.notes : els.notesInput.value.trim();
+            const tone = replayEntry ? replayEntry.tone : els.toneSelect.value;
+            const repeat = replayEntry ? replayEntry.repeat : els.repeatToggle.checked;
+            const timeOut = replayEntry ? replayEntry.timeOut : getFormattedDispatchTime();
+
+            const script = buildDispatchScript({ units, incident, location, notes, repeat, timeOut });
+
+            // Save to history if this is a fresh dispatch
+            if (!replayEntry) {
+                addDispatchToHistory({
+                    id: Date.now(),
+                    timeOut,
+                    units,
+                    incident,
+                    location,
+                    notes,
+                    tone,
+                    repeat,
+                    script
+                });
+            }
+
+            setTransmittingUI(true, 'ON AIR // ALERT TONES');
+
+            // 1. Initial Radio Key-up Squelch
+            await playRadioSquelch(0.14);
+            if (!state.isTransmitting) return;
+
+            // 2. Pre-Alert Station Tones
+            await playSelectedAlertTone(tone);
+            if (!state.isTransmitting) return;
+
+            // 3. Automated CAD Voice Announcement
+            setTransmittingUI(true, 'ON AIR // VOICE DISPATCH');
+            await speakDispatchText(script);
+            if (!state.isTransmitting) return;
+
+            // 4. End-of-Transmission Radio Squelch Tail
+            await playRadioSquelch(0.18);
+
+            setTransmittingUI(false);
+        }
+
+        // ============================================================================
+        // UI RENDERING: APPARATUS CHIPS, QUEUE REORDERING & HISTORY LOG
+        // ============================================================================
+        function getUnitBadgeStyle(unitName) {
+            const lower = unitName.toLowerCase();
+            if (lower.includes('medic') || lower.includes('amb') || lower.includes('ems')) {
+                return 'border-cyan-500/40 text-cyan-300 bg-cyan-950/40';
+            }
+            if (lower.includes('ladder') || lower.includes('truck') || lower.includes('tower')) {
+                return 'border-amber-500/40 text-amber-300 bg-amber-950/40';
+            }
+            if (lower.includes('battalion') || lower.includes('chief')) {
+                return 'border-purple-500/40 text-purple-300 bg-purple-950/40';
+            }
+            return 'border-red-500/40 text-red-300 bg-red-950/40';
+        }
+
+        function renderPresetUnits() {
+            els.presetUnitsGrid.innerHTML = '';
+            state.presetUnits.forEach(unit => {
+                const isSelected = state.activeUnits.includes(unit.name);
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = isSelected
+                    ? 'px-3 py-2 rounded-lg font-mono text-xs font-bold border transition-all flex items-center gap-2 bg-red-600 text-white border-red-400 shadow-md shadow-red-900/30'
+                    : 'px-3 py-2 rounded-lg font-mono text-xs font-semibold border border-cad-border bg-cad-card text-slate-300 hover:border-slate-500 hover:text-white transition-all flex items-center gap-2';
+
+                btn.innerHTML = `
+                    <i class="fa-solid ${isSelected ? 'fa-check-circle' : 'fa-plus-circle'} text-[11px]"></i>
+                    <span>${unit.name}</span>
+                `;
+
+                btn.addEventListener('click', () => {
+                    toggleUnit(unit.name);
+                });
+
+                els.presetUnitsGrid.appendChild(btn);
+            });
+        }
+
+        function renderActiveUnitsQueue() {
+            els.unitCount.textContent = state.activeUnits.length;
+            els.activeUnitsQueue.innerHTML = '';
+
+            if (state.activeUnits.length === 0) {
+                els.activeUnitsQueue.innerHTML = '<span class="text-xs text-slate-500 italic font-mono">No apparatus selected. Click units above or type a custom callsign...</span>';
+                updateScriptPreview();
+                return;
+            }
+
+            state.activeUnits.forEach((unitName, index) => {
+                const pill = document.createElement('div');
+                const colorClass = getUnitBadgeStyle(unitName);
+                pill.className = `flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-lg border font-mono text-xs font-bold ${colorClass}`;
+
+                pill.innerHTML = `
+                    <span>${unitName}</span>
+                    <div class="flex items-center gap-0.5 ml-1 border-l border-white/15 pl-1">
+                        <button type="button" class="move-left-btn p-1 hover:text-white disabled:opacity-30" title="Move Earlier" ${index === 0 ? 'disabled' : ''}>
+                            <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                        </button>
+                        <button type="button" class="move-right-btn p-1 hover:text-white disabled:opacity-30" title="Move Later" ${index === state.activeUnits.length - 1 ? 'disabled' : ''}>
+                            <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                        </button>
+                        <button type="button" class="remove-unit-btn p-1 hover:text-red-400" title="Remove Unit">
+                            <i class="fa-solid fa-xmark text-[11px]"></i>
+                        </button>
+                    </div>
+                `;
+
+                pill.querySelector('.move-left-btn').addEventListener('click', () => moveUnit(index, -1));
+                pill.querySelector('.move-right-btn').addEventListener('click', () => moveUnit(index, 1));
+                pill.querySelector('.remove-unit-btn').addEventListener('click', () => removeUnit(unitName));
+
+                els.activeUnitsQueue.appendChild(pill);
+            });
+
+            updateScriptPreview();
+        }
+
+        function toggleUnit(unitName) {
+            const idx = state.activeUnits.indexOf(unitName);
+            if (idx > -1) {
+                state.activeUnits.splice(idx, 1);
+            } else {
+                state.activeUnits.push(unitName);
+            }
+            renderPresetUnits();
+            renderActiveUnitsQueue();
+        }
+
+        function addCustomUnit() {
+            const raw = els.customUnitInput.value.trim();
+            if (!raw) return;
+
+            // Capitalize nicely if all lowercase
+            const formatted = raw.replace(/\b\w/g, char => char.toUpperCase());
+
+            if (!state.activeUnits.includes(formatted)) {
+                state.activeUnits.push(formatted);
+                renderPresetUnits();
+                renderActiveUnitsQueue();
+            } else {
+                showToast(`${formatted} is already in the active dispatch queue.`);
+            }
+            els.customUnitInput.value = '';
+            els.customUnitInput.focus();
+        }
+
+        function removeUnit(unitName) {
+            state.activeUnits = state.activeUnits.filter(u => u !== unitName);
+            renderPresetUnits();
+            renderActiveUnitsQueue();
+        }
+
+        function moveUnit(index, direction) {
+            const targetIndex = index + direction;
+            if (targetIndex < 0 || targetIndex >= state.activeUnits.length) return;
+            const temp = state.activeUnits[index];
+            state.activeUnits[index] = state.activeUnits[targetIndex];
+            state.activeUnits[targetIndex] = temp;
+            renderActiveUnitsQueue();
+        }
+
+        function renderIncidentPresets() {
+            els.incidentPresets.innerHTML = '';
+            state.incidentPresets.forEach(preset => {
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'text-xs font-mono bg-cad-card hover:bg-amber-500/20 hover:text-amber-300 hover:border-amber-500/40 text-slate-300 border border-cad-border px-2.5 py-1 rounded-md transition-colors';
+                chip.textContent = preset;
+                chip.addEventListener('click', () => {
+                    els.incidentTypeInput.value = preset;
+                    updateScriptPreview();
+                });
+                els.incidentPresets.appendChild(chip);
+            });
+        }
+
+        function addDispatchToHistory(entry) {
+            state.dispatchHistory.unshift(entry);
+            if (state.dispatchHistory.length > 20) {
+                state.dispatchHistory.pop();
+            }
+            renderDispatchHistory();
+        }
+
+        function renderDispatchHistory() {
+            els.dispatchLogList.innerHTML = '';
+
+            if (state.dispatchHistory.length === 0) {
+                els.dispatchLogList.innerHTML = `
+                    <div class="text-center py-8 text-xs font-mono text-slate-500 border border-dashed border-cad-border rounded-lg">
+                        NO RECENT TRANSMISSIONS LOGGED
+                    </div>
+                `;
+                return;
+            }
+
+            state.dispatchHistory.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'bg-cad-bg border border-cad-border hover:border-slate-600 rounded-lg p-3 transition-all';
+
+                const unitBadges = item.units.map(u => 
+                    `<span class="px-1.5 py-0.5 text-[10px] font-mono font-bold rounded border ${getUnitBadgeStyle(u)}">${u}</span>`
+                ).join('');
+
+                card.innerHTML = `
+                    <div class="flex items-start justify-between gap-2 mb-1.5">
+                        <div>
+                            <span class="font-mono text-[11px] font-bold text-cyan-400 mr-2">[${item.timeOut}]</span>
+                            <span class="font-bold text-xs text-amber-400 uppercase">${item.incident}</span>
+                        </div>
+                        <button type="button" class="replay-btn shrink-0 bg-cad-card hover:bg-cyan-600 hover:text-slate-950 text-cyan-400 border border-cad-border font-mono font-bold text-[11px] px-2.5 py-1 rounded transition-colors flex items-center gap-1">
+                            <i class="fa-solid fa-rotate-right"></i> REPLAY
+                        </button>
+                    </div>
+                    <div class="text-xs text-slate-300 mb-2 truncate" title="${item.location}">
+                        <i class="fa-solid fa-location-dot text-red-400 mr-1"></i>${item.location}
+                    </div>
+                    <div class="flex flex-wrap gap-1">
+                        ${unitBadges}
+                    </div>
+                `;
+
+                card.querySelector('.replay-btn').addEventListener('click', () => {
+                    executeDispatchTransmission(item);
+                });
+
+                els.dispatchLogList.appendChild(card);
+            });
+        }
+
+        // ============================================================================
+        // EVENT LISTENERS
+        // ============================================================================
+        els.addCustomUnitBtn.addEventListener('click', addCustomUnit);
+        els.customUnitInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addCustomUnit();
+            }
+        });
+
+        els.clearUnitsBtn.addEventListener('click', () => {
+            state.activeUnits = [];
+            renderPresetUnits();
+            renderActiveUnitsQueue();
+        });
+
+        // Sample location & note quick-fill buttons
+        document.querySelectorAll('.sample-loc-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                els.locationInput.value = btn.dataset.loc;
+                updateScriptPreview();
+            });
+        });
+
+        document.querySelectorAll('.sample-note-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                els.notesInput.value = btn.dataset.note;
+                updateScriptPreview();
+            });
+        });
+
+        // Live preview updates
+        [els.incidentTypeInput, els.locationInput, els.notesInput].forEach(input => {
+            input.addEventListener('input', updateScriptPreview);
+        });
+        els.repeatToggle.addEventListener('change', updateScriptPreview);
+
+        // Voice Tuning Sliders
+        els.rateSlider.addEventListener('input', () => {
+            els.rateValue.textContent = `${parseFloat(els.rateSlider.value).toFixed(2)}x`;
+        });
+        els.pitchSlider.addEventListener('input', () => {
+            els.pitchValue.textContent = parseFloat(els.pitchSlider.value).toFixed(2);
+        });
+        els.resetVoiceBtn.addEventListener('click', () => {
+            els.rateSlider.value = 1.05;
+            els.pitchSlider.value = 0.95;
+            els.rateValue.textContent = '1.05x';
+            els.pitchValue.textContent = '0.95';
+            showToast('CAD voice cadence & pitch reset to standard station defaults.');
+        });
+
+        // Test Tone Alone Button
+        els.testToneBtn.addEventListener('click', async () => {
+            if (state.isTransmitting) return;
+            if (els.toneSelect.value === 'none') {
+                showToast('Select an alert tone pattern first to preview.');
+                return;
+            }
+            setTransmittingUI(true, 'TESTING ALERT TONE...');
+            await playSelectedAlertTone();
+            setTransmittingUI(false);
+        });
+
+        // Transmit & Abort Buttons
+        els.transmitBtn.addEventListener('click', () => executeDispatchTransmission(null));
+        els.stopBtn.addEventListener('click', abortTransmission);
+
+        // Clear History Log
+        els.clearLogBtn.addEventListener('click', () => {
+            state.dispatchHistory = [];
+            renderDispatchHistory();
+        });
+
+        // --- Initial Render ---
+        renderPresetUnits();
+        renderActiveUnitsQueue();
+        renderIncidentPresets();
+        updateScriptPreview();
+    </script>
+</body>
+</html>
